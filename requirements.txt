@@ -1,0 +1,13 @@
+# Graph Fusion Experiment Requirements
+
+# ONNX
+onnx>=1.14.0
+onnxruntime>=1.16.0
+
+# Analysis
+numpy>=1.22.0
+pandas>=1.4.0
+
+# Visualization
+matplotlib>=3.5.0
+networkx>=3.0
