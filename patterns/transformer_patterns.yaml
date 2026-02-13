@@ -1,0 +1,117 @@
+# Transformer Architecture Fusion Patterns
+# =========================================
+
+patterns:
+  # LayerNorm fusion (from component ops)
+  - name: layer_norm_full
+    ops: [ReduceMean, Sub, Pow, ReduceMean, Add, Sqrt, Div, Mul, Add]
+    fused_op: LayerNormalization
+    priority: 30
+    description: "Fuse LayerNorm computed from primitive ops into single op"
+    constraints:
+      - reduce_over_last_dim
+    benefits:
+      - single_kernel
+      - numerically_stable
+      - reduced_memory
+
+  # Simplified LayerNorm (mean + variance)
+  - name: layer_norm_simple
+    ops: [ReduceMean, Sub, ReduceMean, Add, Sqrt, Div]
+    fused_op: LayerNormalization
+    priority: 28
+    description: "Fuse simplified LayerNorm pattern"
+
+  # GELU activation (exact formula)
+  - name: gelu_exact
+    ops: [Mul, Erf, Add, Mul]
+    fused_op: Gelu
+    priority: 25
+    description: "Fuse exact GELU: 0.5 * x * (1 + erf(x / sqrt(2)))"
+
+  # GELU activation (tanh approximation)
+  - name: gelu_tanh_approx
+    ops: [Mul, Pow, Mul, Add, Mul, Tanh, Add, Mul]
+    fused_op: GeluApprox
+    priority: 25
+    description: "Fuse GELU tanh approximation"
+
+  # MatMul + Bias fusion
+  - name: matmul_bias
+    ops: [MatMul, Add]
+    fused_op: Gemm
+    priority: 15
+    description: "Fuse MatMul with bias Add into Gemm"
+    constraints:
+      - bias_is_1d
+    benefits:
+      - single_kernel
+      - fused_bias_add
+
+  # QKV projection fusion
+  - name: qkv_matmul
+    ops: [MatMul, MatMul, MatMul]
+    fused_op: FusedQKVProjection
+    priority: 35
+    description: "Fuse Q, K, V linear projections"
+    constraints:
+      - same_input
+      - parallel_projections
+    benefits:
+      - single_input_read
+      - better_parallelism
+
+  # Attention score computation
+  - name: attention_scores
+    ops: [MatMul, Div, Softmax]
+    fused_op: FusedAttentionScores
+    priority: 30
+    description: "Fuse attention score computation (QK^T / sqrt(d) + softmax)"
+    benefits:
+      - flash_attention_compatible
+      - memory_efficient
+
+  # Full self-attention fusion
+  - name: multi_head_attention
+    ops: [MatMul, MatMul, MatMul, MatMul, Div, Softmax, MatMul, MatMul]
+    fused_op: MultiHeadAttention
+    priority: 40
+    description: "Fuse complete multi-head attention"
+    constraints:
+      - valid_attention_pattern
+    benefits:
+      - flash_attention
+      - minimal_memory
+
+  # Feed-forward network fusion
+  - name: ffn_gelu
+    ops: [MatMul, Add, Gelu, MatMul, Add]
+    fused_op: FusedFFN
+    priority: 25
+    description: "Fuse FFN: Linear + GELU + Linear"
+    benefits:
+      - reduced_memory_traffic
+
+  # Softmax fusion patterns
+  - name: softmax_components
+    ops: [ReduceMax, Sub, Exp, ReduceSum, Div]
+    fused_op: Softmax
+    priority: 20
+    description: "Fuse numerically stable softmax from components"
+
+  # Embedding + LayerNorm (BERT-style)
+  - name: embedding_ln
+    ops: [Gather, Add, LayerNormalization]
+    fused_op: FusedEmbedding
+    priority: 15
+    description: "Fuse token + position embeddings with LayerNorm"
+
+  # Residual + LayerNorm (post-attention)
+  - name: residual_layernorm
+    ops: [Add, LayerNormalization]
+    fused_op: FusedResidualLN
+    priority: 18
+    description: "Fuse residual connection with LayerNorm"
+    benefits:
+      - single_kernel
+      - in_place_add

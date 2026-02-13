@@ -1,0 +1,87 @@
+# Convolutional Neural Network Fusion Patterns
+# =============================================
+
+patterns:
+  # Conv + BatchNorm fusion
+  - name: conv_bn
+    ops: [Conv, BatchNormalization]
+    fused_op: FusedConvBn
+    priority: 10
+    description: "Fuse Conv2D with BatchNormalization - weights can be folded at compile time"
+    constraints:
+      - same_spatial_dims
+      - bn_after_conv
+    benefits:
+      - eliminates_bn_computation
+      - reduces_memory_bandwidth
+      - single_kernel_launch
+
+  # Conv + BatchNorm + ReLU fusion (very common in ResNet, VGG)
+  - name: conv_bn_relu
+    ops: [Conv, BatchNormalization, Relu]
+    fused_op: FusedConvBnRelu
+    priority: 20
+    description: "Fuse Conv + BN + ReLU - most common pattern in CNNs"
+    constraints:
+      - same_spatial_dims
+    benefits:
+      - single_kernel_launch
+      - eliminates_intermediates
+      - better_cache_utilization
+
+  # Conv + ReLU (without BN)
+  - name: conv_relu
+    ops: [Conv, Relu]
+    fused_op: FusedConvRelu
+    priority: 5
+    description: "Fuse Conv with ReLU activation"
+    benefits:
+      - single_kernel_launch
+
+  # Conv + Add (residual connection) + ReLU
+  - name: conv_add_relu
+    ops: [Conv, Add, Relu]
+    fused_op: FusedConvAddRelu
+    priority: 15
+    description: "Fuse Conv with residual Add and ReLU - ResNet bottleneck pattern"
+    constraints:
+      - add_is_residual
+    benefits:
+      - fused_residual
+      - single_output_write
+
+  # Depthwise Conv + Pointwise Conv (MobileNet)
+  - name: depthwise_pointwise
+    ops: [Conv, Conv]
+    fused_op: SeparableConv
+    priority: 8
+    description: "Fuse depthwise and pointwise convolutions"
+    constraints:
+      - first_is_depthwise
+      - second_is_pointwise
+    benefits:
+      - optimized_memory_access
+      - single_kernel_launch
+
+  # Conv + Sigmoid (for attention gates)
+  - name: conv_sigmoid
+    ops: [Conv, Sigmoid]
+    fused_op: FusedConvSigmoid
+    priority: 5
+    description: "Fuse Conv with Sigmoid activation"
+
+  # Pooling patterns
+  - name: conv_bn_relu_pool
+    ops: [Conv, BatchNormalization, Relu, MaxPool]
+    fused_op: FusedConvBnReluPool
+    priority: 25
+    description: "Fuse Conv + BN + ReLU + MaxPool"
+    benefits:
+      - minimizes_memory_traffic
+
+  # Average pooling for global feature extraction
+  - name: conv_global_avgpool
+    ops: [Conv, GlobalAveragePool]
+    fused_op: FusedConvGlobalPool
+    priority: 12
+    description: "Fuse final conv with global average pooling"
